@@ -55,10 +55,10 @@
 mod yaml_parser;
 mod yaml_task;
 
+use crate::DagError;
+
 pub use self::yaml_parser::YamlParser;
 pub use self::yaml_task::YamlTask;
-
-use crate::ParseError;
 
 /// Errors about task configuration items.
 #[derive(Debug)]
@@ -84,36 +84,36 @@ pub enum FileContentError {
 /// Configuration file not found.
 pub struct FileNotFound(pub std::io::Error);
 
-impl From<YamlTaskError> for ParseError {
+impl From<YamlTaskError> for DagError {
     fn from(value: YamlTaskError) -> Self {
-        match value {
-            YamlTaskError::StartWordError => {
-                "File content is not start with 'dagrs'.".to_string().into()
-            }
+        let error_message = match value {
+            YamlTaskError::StartWordError => "File content is not start with 'dagrs'.".to_string(),
             YamlTaskError::NoNameAttr(ref msg) => {
-                format!("Task has no name field. [{}]", msg).into()
+                format!("Task has no name field. [{}]", msg)
             }
             YamlTaskError::NotFoundPrecursor(ref msg) => {
-                format!("Task cannot find the specified predecessor. [{}]", msg).into()
+                format!("Task cannot find the specified predecessor. [{}]", msg)
             }
             YamlTaskError::NoScriptAttr(ref msg) => {
                 format!("The 'script' attribute is not defined. [{}]", msg).into()
             }
-        }
+        };
+        DagError::ParserError(error_message)
     }
 }
 
-impl From<FileContentError> for ParseError {
+impl From<FileContentError> for DagError {
     fn from(value: FileContentError) -> Self {
-        match value {
-            FileContentError::IllegalYamlContent(ref err) => err.to_string().into(),
-            FileContentError::Empty(ref file) => format!("File is empty! [{}]", file).into(),
-        }
+        let error_message = match value {
+            FileContentError::IllegalYamlContent(ref err) => err.to_string(),
+            FileContentError::Empty(ref file) => format!("File is empty! [{}]", file),
+        };
+        DagError::ParserError(error_message)
     }
 }
 
-impl From<FileNotFound> for ParseError {
+impl From<FileNotFound> for DagError {
     fn from(value: FileNotFound) -> Self {
-        format!("File not found. [{}]", value.0).into()
+        DagError::ParserError(format!("File not found. [{}]", value.0))
     }
 }

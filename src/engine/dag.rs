@@ -43,7 +43,7 @@ use tokio::task::JoinHandle;
 ///     Output::new(1)
 /// });
 /// let mut dag=Dag::with_tasks(vec![task]);
-/// assert!(dag.start().unwrap())
+/// assert!(dag.start().is_ok())
 ///
 /// ```
 #[derive(Debug)]
@@ -190,23 +190,24 @@ impl Dag {
     }
 
     /// This function is used for the execution of a single dag.
-    pub fn start(&mut self) -> Result<bool, DagError> {
+    pub fn start(&mut self) -> Result<(), DagError> {
         // If the current continuable state is false, the task will start failing.
         if self.can_continue.load(Ordering::Acquire) {
             self.init().map_or_else(Err, |_| {
-                Ok(tokio::runtime::Runtime::new()
+                tokio::runtime::Runtime::new()
                     .unwrap()
-                    .block_on(async { self.run().await }))
+                    .block_on(async { self.run().await })
             })
         } else {
-            Ok(false)
+            // TODO: Change this error
+            Err(DagError::EmptyJob)
         }
     }
 
     /// Execute tasks sequentially according to the execution sequence given by
     /// topological sorting, and cancel the execution of subsequent tasks if an
     /// error is encountered during task execution.
-    pub(crate) async fn run(&self) -> bool {
+    pub(crate) async fn run(&self) -> Result<(), DagError> {
         let mut exe_seq = String::from("[Start]");
         self.exe_sequence
             .iter()
@@ -221,7 +222,7 @@ impl Dag {
         for (tid, handle) in handles {
             match handle.await {
                 Ok(succeed) => {
-                    if !succeed {
+                    if succeed.is_err() {
                         self.handle_error(tid).await;
                     }
                 }
@@ -234,13 +235,20 @@ impl Dag {
                 }
             }
         }
-        self.can_continue
+        if self
+            .can_continue
             .compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed)
             .is_ok()
+        {
+            Ok(())
+        } else {
+            // TODO: Change this error
+            Err(DagError::EmptyJob)
+        }
     }
 
     /// Execute a given task asynchronously.
-    fn execute_task(&self, task: Arc<Box<dyn Task>>) -> JoinHandle<bool> {
+    fn execute_task(&self, task: Arc<Box<dyn Task>>) -> JoinHandle<Result<(), DagError>> {
         let env = self.env.clone();
         let task_id = task.id();
         let task_name = task.name().to_string();
@@ -263,7 +271,7 @@ impl Dag {
                 // the continuation flag is set to false, if it is set to false, cancel the specific
                 // execution logic of the task and return immediately.
                 if !can_continue.load(Ordering::Acquire) || !wait_for.success() {
-                    return true;
+                    return Ok(());
                 }
                 if let Some(content) = wait_for.get_output() {
                     if !content.is_empty() {
@@ -283,18 +291,18 @@ impl Dag {
                             "Execution failed [name: {}, id: {}]",
                             task_name, task_id
                         ));
-                        false
+                        // TODO: Change this error
+                        Err(DagError::EmptyJob)
                     },
                     |out| {
                         // Store execution results
                         if out.is_err() {
+                            let error = out.get_err().unwrap();
                             log::error(format!(
                                 "Execution failed [name: {}, id: {}]\nerr: {}",
-                                task_name,
-                                task_id,
-                                out.get_err().unwrap()
+                                task_name, task_id, error
                             ));
-                            false
+                            Err(DagError::TaskError(error))
                         } else {
                             execute_state.set_output(out);
                             execute_state.exe_success();
@@ -303,7 +311,7 @@ impl Dag {
                                 "Execution succeed [name: {}, id: {}]",
                                 task_name, task_id
                             ));
-                            true
+                            Ok(())
                         }
                     },
                 )

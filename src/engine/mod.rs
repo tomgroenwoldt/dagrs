@@ -14,7 +14,6 @@ pub use dag::Dag;
 mod dag;
 mod graph;
 
-use crate::ParseError;
 use anymap2::any::CloneAnySendSync;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
@@ -37,13 +36,15 @@ pub struct Engine {
 /// A synthesis of all possible errors.
 pub enum DagError {
     /// Yaml file parsing error.
-    ParserError(ParseError),
+    ParserError(String),
     /// Task dependency error.
     RelyTaskIllegal(String),
     /// There are loops in task dependencies.
     LoopGraph,
     /// There are no tasks in the job.
     EmptyJob,
+    /// Task error
+    TaskError(String),
 }
 
 impl Engine {
@@ -65,26 +66,24 @@ impl Engine {
     }
 
     /// Given a Dag name, execute this Dag.
-    /// Returns true if the given Dag executes successfully, otherwise false.
-    pub fn run_dag(&mut self, name: &str) -> bool {
+    pub fn run_dag(&mut self, name: &str) -> Result<(), DagError> {
         if !self.dags.contains_key(name) {
             log::error(format!("No job named '{}'", name));
-            false
+            Err(DagError::EmptyJob)
         } else {
             let job = self.dags.get(name).unwrap();
-            self.runtime.block_on(job.run())
+            self.runtime.block_on(async { job.run().await })
         }
     }
 
     /// Execute all the Dags in the Engine in sequence according to the order numbers of the Dags in
-    /// the sequence from small to large. The return value is the execution status of all tasks.
-    pub fn run_sequential(&mut self) -> Vec<bool> {
-        let mut res = Vec::new();
+    /// the sequence from small to large.
+    pub fn run_sequential(&mut self) -> Result<(), DagError> {
         for seq in 1..self.sequence.len() + 1 {
             let name = self.sequence.get(&seq).unwrap().clone();
-            res.push(self.run_dag(name.as_str()));
+            self.run_dag(name.as_str())?;
         }
-        res
+        Ok(())
     }
 
     /// Given the name of the Dag, get the execution result of the specified Dag.
@@ -115,13 +114,8 @@ impl DagError {
             Self::RelyTaskIllegal(ref name) => {
                 format!("Task[{}] dependency task not exist.", name)
             }
-            Self::ParserError(ref msg) => msg.0.to_string(),
+            Self::ParserError(ref msg) => format!("Parser error: {}", msg),
+            DagError::TaskError(ref msg) => format!("Task error: {}", msg),
         }
-    }
-}
-
-impl From<ParseError> for DagError {
-    fn from(value: ParseError) -> Self {
-        Self::ParserError(value)
     }
 }

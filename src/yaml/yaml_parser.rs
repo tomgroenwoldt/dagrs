@@ -1,7 +1,7 @@
 //! Default yaml configuration file parser.
 
 use super::{FileContentError, FileNotFound, YamlTask, YamlTaskError};
-use crate::{utils::ParseError, Action, CommandAction, Parser, Task};
+use crate::{Action, CommandAction, DagError, Parser, Task};
 use std::{collections::HashMap, fs::File, io::Read, sync::Arc};
 use yaml_rust::{Yaml, YamlLoader};
 
@@ -10,7 +10,7 @@ pub struct YamlParser;
 
 impl YamlParser {
     /// Given file path, and load configuration file.
-    fn load_file(&self, file: &str) -> Result<String, ParseError> {
+    fn load_file(&self, file: &str) -> Result<String, DagError> {
         let mut content = String::new();
         let mut yaml = File::open(file).map_err(FileNotFound)?;
         yaml.read_to_string(&mut content).unwrap();
@@ -65,7 +65,7 @@ impl Parser for YamlParser {
         &self,
         file: &str,
         mut specific_actions: HashMap<String, Action>,
-    ) -> Result<Vec<Box<dyn Task>>, ParseError> {
+    ) -> Result<Vec<Box<dyn Task>>, DagError> {
         let content = self.load_file(file)?;
         // Parse Yaml
         let yaml_tasks =
