@@ -7,7 +7,7 @@ use dagrs::{log, Complex, Dag, DagError, DefaultTask, EnvVar, Input, LogLevel, O
 fn yaml_task_correct_execute() {
     let _initialized = log::init_logger(LogLevel::Off, None);
     let mut job = Dag::with_yaml("tests/config/correct.yaml", HashMap::new()).unwrap();
-    assert!(job.start().unwrap());
+    assert!(job.start().is_ok());
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn yaml_task_failed_execute() {
     let res = Dag::with_yaml("tests/config/script_run_failed.yaml", HashMap::new())
         .unwrap()
         .start();
-    assert!(!res.unwrap());
+    assert!(!res.is_ok());
 }
 
 #[test]
@@ -121,5 +121,5 @@ fn task_failed_execute() {
 
     let mut job = Dag::with_tasks(vec![a, b, c, d, e, f, g]);
     job.set_env(env);
-    assert!(!job.start().unwrap());
+    assert!(!job.start().is_ok());
 }
