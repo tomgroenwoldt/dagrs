@@ -119,6 +119,11 @@ impl DefaultTask {
         }
     }
 
+    /// Overwrite the allocated ID.
+    pub fn set_id(&mut self, id: usize) {
+        self.id = id;
+    }
+
     /// Give the task a name.
     pub fn set_name(&mut self, name: &str) {
         self.name = name.to_string();

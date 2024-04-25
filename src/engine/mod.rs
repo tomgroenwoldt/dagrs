@@ -47,8 +47,8 @@ pub enum DagError {
     #[error("There are no tasks in the job.")]
     EmptyJob,
     /// Task error
-    #[error("Task error: {0}")]
-    TaskError(String),
+    #[error("Task with ID {0} errored: {1}")]
+    TaskError(usize, String),
 }
 
 impl Engine {

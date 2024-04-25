@@ -287,6 +287,9 @@ impl Dag {
                 Ok(succeed) => {
                     if succeed.is_err() {
                         self.handle_error(tid);
+                        if let Err(DagError::TaskError(_, _)) = succeed {
+                            return succeed;
+                        }
                     }
                 }
                 Err(err) => {
@@ -363,7 +366,7 @@ impl Dag {
                                 "Execution failed [name: {}, id: {}]\nerr: {}",
                                 task_name, task_id, error
                             );
-                            Err(DagError::TaskError(error))
+                            Err(DagError::TaskError(task_id, error))
                         } else {
                             execute_state.set_output(out);
                             execute_state.exe_success();
